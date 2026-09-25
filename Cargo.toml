@@ -1,0 +1,14 @@
+[package]
+name = "riak"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Experimental custom RIAK cryptography research prototype"
+readme = "README.md"
+publish = false
+
+[dependencies]
+
+[dev-dependencies]
+aes = "0.8"
+chacha20 = "0.9"
