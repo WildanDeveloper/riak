@@ -37,4 +37,9 @@ cargo run --release --manifest-path analysis/ddt-probe/Cargo.toml -- \
   --width 12 --key-independence \
   --assert-diff-log2 4 --assert-zero-log2 1 --assert-corr-log2 2
 
+# Repeatable static side-channel screen. Fails on integer division in the core
+# or a secret-dependent branch. A pass is a screen on one toolchain, not a
+# constant-time guarantee.
+scripts/asm_audit.sh
+
 printf '%s\n' "RIAK local CI checks: PASS"
