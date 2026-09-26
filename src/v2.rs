@@ -21,6 +21,8 @@
 
 #![forbid(unsafe_code)]
 
+use crate::nonce::NonceSequence;
+
 /// Candidate version identifier.
 pub const VERSION: &str = "0.2-candidate";
 
@@ -272,6 +274,8 @@ pub enum V2Error {
     AuthenticationFailed,
     /// The input would require more than 2^32 counter blocks.
     CounterOverflow,
+    /// The stateful nonce counter is exhausted.
+    NonceExhausted,
     /// A length cannot be represented by the format.
     LengthOverflow,
 }
@@ -281,6 +285,7 @@ impl std::fmt::Display for V2Error {
         match self {
             Self::AuthenticationFailed => formatter.write_str("authentication failed"),
             Self::CounterOverflow => formatter.write_str("counter block limit exceeded"),
+            Self::NonceExhausted => formatter.write_str("nonce counter exhausted"),
             Self::LengthOverflow => formatter.write_str("length cannot be represented"),
         }
     }
@@ -359,6 +364,26 @@ impl RiakV2Cipher {
         output.extend_from_slice(&ciphertext);
         output.extend_from_slice(&tag);
         Ok(output)
+    }
+
+    /// Encrypt with a stateful counter nonce.
+    ///
+    /// The prefix belongs to exactly one key and must be persisted across
+    /// process restarts, together with the issued counter (or a fresh prefix
+    /// must be generated). This method prevents accidental nonce reuse within
+    /// one sequence; the lower-level [`Self::seal`] remains available for
+    /// callers that manage nonces themselves.
+    pub fn seal_with_sequence(
+        &self,
+        sequence: &mut NonceSequence,
+        aad: &[u8],
+        plaintext: &[u8],
+    ) -> Result<([u8; 12], Vec<u8>), V2Error> {
+        let nonce = sequence
+            .next()
+            .map_err(|_| V2Error::NonceExhausted)?;
+        let sealed = self.seal(&nonce, aad, plaintext)?;
+        Ok((nonce, sealed))
     }
 
     /// Verify and decrypt a message. No plaintext is returned before the tag
@@ -621,6 +646,21 @@ mod tests {
             check_lengths(0, MAX_MESSAGE_SIZE + 1),
             Err(V2Error::LengthOverflow)
         );
+    }
+
+    #[test]
+    fn stateful_sequence_avoids_nonce_reuse() {
+        let cipher = RiakV2Cipher::from_words([0x1357_9bdf; 16]);
+        let mut sequence = NonceSequence::new([0x42; 8]);
+        let (nonce_a, sealed_a) = cipher
+            .seal_with_sequence(&mut sequence, b"aad", b"first")
+            .unwrap();
+        let (nonce_b, sealed_b) = cipher
+            .seal_with_sequence(&mut sequence, b"aad", b"second")
+            .unwrap();
+        assert_ne!(nonce_a, nonce_b);
+        assert_eq!(cipher.open(&nonce_a, b"aad", &sealed_a).unwrap(), b"first");
+        assert_eq!(cipher.open(&nonce_b, b"aad", &sealed_b).unwrap(), b"second");
     }
 
     #[test]

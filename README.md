@@ -108,6 +108,10 @@ let sealed = cipher.seal(&nonce, b"RIAK3C", plaintext)?;
 let opened = cipher.open(&nonce, b"RIAK3C", &sealed)?;
 ```
 
+For multiple messages under one key, prefer the stateful
+`seal_with_sequence` API with `riak::NonceSequence`; persist a unique prefix
+per key and never restart its counter with the same prefix.
+
 Both experimental formats remain unaudited. `RIAK3C` is the current research
 candidate, not a production replacement.
 

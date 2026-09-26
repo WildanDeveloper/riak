@@ -256,8 +256,11 @@ The legacy/operational findings were addressed as follows:
   descriptor, and read from that same descriptor.
 - CLI and v0.2/v0.3 wrapper inputs have a 64 MiB ceiling.
 - v0.1, v0.2, and v0.3 now perform best-effort round-key/local-word clearing.
+- v0.2/v0.3 expose `seal_with_sequence` backed by `NonceSequence` for
+  stateful counter nonces; the legacy caller-supplied nonce API remains
+  misuse-sensitive by design.
 
-Nonce reuse remains an API-level prohibition for the stateless library; it
+Nonce reuse on the legacy stateless API remains an API-level prohibition; it
 cannot be detected reliably without stateful nonce tracking. The v0.1 linear
 break, v0.1 mode collapse, and the custom v0.3 security gates are not claimed
 fixed by these operational mitigations.

@@ -19,6 +19,9 @@ protect real or sensitive data.
   chmod 600 key.hex
   ```
 - Prefer `--key-file`; raw `--key` command-line arguments are rejected.
+- Never reuse a `(key, nonce)` pair. For repeated messages, use
+  `NonceSequence`/`seal_with_sequence` with a persisted per-key prefix; the
+  lower-level nonce-taking API remains caller-managed.
 - If a key has ever protected real data, assume it is compromised. Rotate it
   and re-encrypt the data; removing it from the current tree or repository
   history does not make it secret again.

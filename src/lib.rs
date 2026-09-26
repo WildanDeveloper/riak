@@ -27,6 +27,11 @@ pub mod v2;
 /// Experimental RIAK v0.3 candidate with a full-diffusion outer network.
 pub mod v3;
 
+/// Nonce generation helpers for stateful encryption.
+pub mod nonce;
+
+pub use nonce::{NonceError, NonceSequence};
+
 pub const ROUNDS: usize = 24;
 
 /// Primes as round constants (see krip.md: their role is only

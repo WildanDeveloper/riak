@@ -159,8 +159,9 @@ the same message-size ceiling before allocating authentication input.
 
 The mode and tag are still experimental because the custom block cipher and
 this mode have not passed the complete cryptanalysis, side-channel, and
-external-review gates. Nonce reuse remains forbidden and is not detected by
-the stateless library API.
+external-review gates. Nonce reuse remains forbidden for the stateless API.
+For multiple messages under one key, use `riak::NonceSequence` and persist a
+unique 8-byte prefix per key; rotate the prefix before restarting the counter.
 
 ## CLI format
 
@@ -195,6 +196,7 @@ is never printed. Output is intentionally not deterministic.
 ## Reproducibility
 
 - Rust implementation: `src/v3.rs`
+- Stateful nonce helper: `src/nonce.rs`
 - Independent Python reference: `simulator/riak_v3.py`
 - Block vectors: `tests/v3_vectors.rs`
 - Wrapper vectors: `tests/v3_cipher_vectors.rs`

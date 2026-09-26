@@ -22,6 +22,7 @@ does not use a standard cipher/AEAD as its core.
 Relevant source:
 
 - `src/v3.rs`
+- `src/nonce.rs`
 - `src/main.rs` (`v3enc`/`v3dec`)
 - `simulator/riak_v3.py`
 - `docs/riak_v3.md`
@@ -111,7 +112,9 @@ confidentiality decryption. The CLI authenticates `magic || nonce` as AAD.
 
 Review specifically:
 
-- nonce reuse and state recovery;
+- nonce reuse and state recovery; the library now offers
+  `seal_with_sequence`/`NonceSequence` for stateful counter nonces, while the
+  raw nonce-taking API remains caller-managed;
 - partial-block and empty-message handling;
 - length/AAD concatenation ambiguity;
 - tag forgery, truncation, extension, and wrong-key behavior;
