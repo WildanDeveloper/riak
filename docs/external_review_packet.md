@@ -143,7 +143,7 @@ python3 simulator/generate_v3_vectors.py
 Screens:
 
 ```text
-cargo run --release --example v3_sample -- wildan
+cargo run --release --example v3_sample -- wildanelis
 cargo run --release --example v3_probe
 cargo run --release --example v3_avalanche 512
 cargo run --release --example v3_differential 262144
@@ -158,6 +158,10 @@ cargo run --release --example v3_related_multibit 16384
 cargo run --release --example v3_timing
 cargo run --release --example v3_bench
 ```
+
+`v3_sample` generates an ephemeral key and random nonce when no key file is
+provided; it never prints a key. Any key-like constants in KAT fixtures are
+public test inputs, not credentials.
 
 The screens are intentionally labeled bounded/sampled. A reviewer should rerun
 with independent seeds, larger sample sizes, and independently implemented

@@ -1,14 +1,21 @@
-//! Deterministic RIAK v0.3 sample with explicitly labeled fields.
+//! Ephemeral RIAK v0.3 sample with explicitly labeled fields.
 //!
 //! Run:
 //!   cargo run --release --example v3_sample
-//!   cargo run --release --example v3_sample -- wildan
+//!   cargo run --release --example v3_sample -- wildanelis
+//!   cargo run --release --example v3_sample -- wildanelis key.hex
 //!
-//! This uses a public test key and a fixed nonce for reproducibility. It is
-//! not a production example. The CLI uses a random nonce and will not produce
-//! this exact file.
+//! When no key file is supplied, the example generates an ephemeral key in
+//! memory and never prints it. A supplied file may contain 64 raw bytes or
+//! 128 hexadecimal characters. The nonce is always freshly generated.
+//!
+//! This is a research example, not a production key-management workflow. The
+//! fixed keys in test-vector files are public, non-secret KAT fixtures and
+//! must never be used to protect real data.
 
 use riak::v3::{RiakV3Cipher, AUTH_TAG_LEN};
+use std::fs;
+use std::io::Read;
 
 fn hex(bytes: &[u8]) -> String {
     let mut output = String::with_capacity(bytes.len() * 2);
@@ -18,38 +25,61 @@ fn hex(bytes: &[u8]) -> String {
     output
 }
 
-fn main() {
-    let plaintext = std::env::args()
-        .nth(1)
-        .unwrap_or_else(|| "wildan".to_owned());
-    let plaintext = plaintext.into_bytes();
+fn os_random(buf: &mut [u8]) {
+    fs::File::open("/dev/urandom")
+        .expect("cannot open /dev/urandom")
+        .read_exact(buf)
+        .expect("cannot read /dev/urandom");
+}
 
-    let key_words: [u32; 16] = [
-        0xdead_beef,
-        0xcafe_babe,
-        0x1234_5678,
-        0x9abc_def0,
-        0x0f1e_2d3c,
-        0x4b5a_6978,
-        0x87c6_9d5e,
-        0x30a4_b7c1,
-        0x55aa_55aa,
-        0xff00_ff00,
-        0x0123_4567,
-        0x89ab_cdef,
-        0xdead_beef,
-        0xcafe_babe,
-        0x1357_9bdf,
-        0x2468_ace0,
-    ];
+fn parse_hex_key(text: &str) -> Result<[u8; 64], String> {
+    let text = text.trim();
+    if text.len() != 128 || !text.is_ascii() {
+        return Err("hex key must contain exactly 128 ASCII hex characters".to_owned());
+    }
     let mut key = [0u8; 64];
-    for (i, word) in key_words.iter().enumerate() {
-        key[i * 4..i * 4 + 4].copy_from_slice(&word.to_be_bytes());
+    for (index, byte) in key.iter_mut().enumerate() {
+        *byte = u8::from_str_radix(&text[index * 2..index * 2 + 2], 16)
+            .map_err(|_| "key contains non-hex characters".to_owned())?;
+    }
+    Ok(key)
+}
+
+fn load_key(path: Option<&str>) -> Result<([u8; 64], String), String> {
+    let Some(path) = path else {
+        let mut key = [0u8; 64];
+        os_random(&mut key);
+        return Ok((key, "ephemeral random (not printed)".to_owned()));
+    };
+    let data = fs::read(path).map_err(|e| format!("cannot read key file {path}: {e}"))?;
+    if data.len() == 64 {
+        let mut key = [0u8; 64];
+        key.copy_from_slice(&data);
+        return Ok((key, format!("file:{path} (raw 64 bytes; not printed)")));
+    }
+    let text = std::str::from_utf8(&data)
+        .map_err(|_| format!("key file {path} is neither raw bytes nor UTF-8 hex"))?;
+    Ok((parse_hex_key(text)?, format!("file:{path} (hex; not printed)")))
+}
+
+fn main() {
+    let mut arguments = std::env::args().skip(1);
+    let plaintext = arguments
+        .next()
+        .unwrap_or_else(|| "wildanelis".to_owned())
+        .into_bytes();
+    let key_path = arguments.next();
+    if arguments.next().is_some() {
+        eprintln!("usage: v3_sample [plaintext] [key-file]");
+        std::process::exit(2);
     }
 
-    let nonce = [
-        0x10u8, 0x11, 0x12, 0x13, 0x14, 0x15, 0x16, 0x17, 0x18, 0x19, 0x1a, 0x1b,
-    ];
+    let (key, key_source) = load_key(key_path.as_deref()).unwrap_or_else(|error| {
+        eprintln!("error: {error}");
+        std::process::exit(2);
+    });
+    let mut nonce = [0u8; 12];
+    os_random(&mut nonce);
     let mut header = b"RIAK3C".to_vec();
     header.extend_from_slice(&nonce);
 
@@ -62,10 +92,10 @@ fn main() {
     let opened = cipher.open(&nonce, &header, &sealed).unwrap();
     assert_eq!(opened, plaintext);
 
-    println!("RIAK v0.3 deterministic sample (TEST ONLY)");
+    println!("RIAK v0.3 ephemeral sample (TEST ONLY)");
     println!("plaintext_text: {}", String::from_utf8_lossy(&plaintext));
     println!("plaintext_hex: {}", hex(&plaintext));
-    println!("key_hex: {}", hex(&key));
+    println!("key_source: {key_source}");
     println!("nonce_hex: {}", hex(&nonce));
     println!("aad_hex: {}", hex(&header));
     println!("ciphertext_hex: {}", hex(ciphertext));

@@ -1,5 +1,6 @@
 // Test vectors generated from the Python simulator of RIAK spec v0.1.
 // Do not edit manually — regenerate from the simulator.
+// These are public, non-secret KAT fixtures; never reuse them for real data.
 #![allow(dead_code)]
 pub struct Vec3 { pub name: &'static str, pub key: [u32; 16], pub pt: [u32; 4], pub ct: [u32; 4] }
 

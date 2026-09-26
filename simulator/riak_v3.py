@@ -265,23 +265,22 @@ def self_test() -> None:
         pass
     else:
         raise AssertionError("tampering was accepted")
-    sample_key = [
-        0xDEADBEEF, 0xCAFEBABE, 0x12345678, 0x9ABCDEF0,
-        0x0F1E2D3C, 0x4B5A6978, 0x87C69D5E, 0x30A4B7C1,
-        0x55AA55AA, 0xFF00FF00, 0x01234567, 0x89ABCDEF,
-        0xDEADBEEF, 0xCAFEBABE, 0x13579BDF, 0x2468ACE0,
+    import os
+    ephemeral_key = [
+        int.from_bytes(os.urandom(4), "big") for _ in range(16)
     ]
-    sample_nonce = bytes(range(0x10, 0x1C))
-    sample_aad = b"RIAK3C" + sample_nonce
-    sample_plaintext = b"wildan"
-    expected_sample = bytes.fromhex(
-        "9d638a5e52b68a9002a6b127aa2b0c69d1bc987782b9"
+    ephemeral_nonce = os.urandom(12)
+    ephemeral_aad = b"RIAK3C" + ephemeral_nonce
+    ephemeral_plaintext = b"ephemeral self-test"
+    ephemeral = RiakV3Cipher(ephemeral_key)
+    ephemeral_sealed = ephemeral.seal(
+        ephemeral_nonce, ephemeral_aad, ephemeral_plaintext
     )
-    assert RiakV3Cipher(sample_key).seal(
-        sample_nonce, sample_aad, sample_plaintext
-    ) == expected_sample
+    assert ephemeral.open(
+        ephemeral_nonce, ephemeral_aad, ephemeral_sealed
+    ) == ephemeral_plaintext
     print("RIAK v0.3 reference self-test: PASS")
-    print("sample ciphertext:", " ".join(f"{word:08x}" for word in encrypted))
+    print("block ciphertext:", " ".join(f"{word:08x}" for word in encrypted))
 
 
 if __name__ == "__main__":

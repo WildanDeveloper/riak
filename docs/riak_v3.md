@@ -178,23 +178,19 @@ feature and explicit `legacy-enc`/`legacy-dec` research commands; the old
 ciphertext length, but the v0.1 block cipher itself remains broken. v0.2
 (`RIAK2C`) remains an isolated research format.
 
-## Deterministic labeled sample
+## Ephemeral labeled sample
 
-For a reproducible test (public test key and fixed nonce only), run:
-
-```text
-cargo run --release --example v3_sample -- wildan
-```
-
-The tool prints separate `plaintext_hex`, `ciphertext_hex`, `tag_hex`, and
-`riak3c_file_hex` fields. The lowercase `wildan` sample has ciphertext
-`9d638a5e52b6`, tag `8a9002a6b127aa2b0c69d1bc987782b9`, and file hex:
+For a research-only sample that never embeds or prints a key:
 
 ```text
-5249414b3343101112131415161718191a1b9d638a5e52b68a9002a6b127aa2b0c69d1bc987782b9
+cargo run --release --example v3_sample -- wildanelis
 ```
 
-The CLI itself generates a fresh random nonce, so its exact bytes will differ.
+The tool generates an ephemeral key and a fresh random nonce in memory, then
+prints separate `plaintext_hex`, `ciphertext_hex`, `tag_hex`, and
+`riak3c_file_hex` fields. A key file can be supplied as the second positional
+argument; it must contain 64 raw bytes or 128 hexadecimal characters. The key
+is never printed. Output is intentionally not deterministic.
 
 ## Reproducibility
 
@@ -205,7 +201,7 @@ The CLI itself generates a fresh random nonce, so its exact bytes will differ.
 - Generated Python/Rust wrapper cross-check: `tests/v3_fuzz_vectors.rs`
   and `simulator/generate_v3_vectors.py`
 - CLI integration: `tests/cli_v3.rs`
-- Deterministic labeled sample: `examples/v3_sample.rs`
+- Ephemeral labeled sample: `examples/v3_sample.rs`
 - Screens: `examples/v3_probe.rs`, `v3_avalanche.rs`, `v3_differential.rs`,
   `v3_linear_trail_search.rs`, `v3_linear_hull.rs`, `v3_full_linear.rs`,
   `v3_trail_search.rs`, `v3_related.rs`, `v3_related_multibit.rs`,

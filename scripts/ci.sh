@@ -14,7 +14,7 @@ cargo run --release --example v2_differential 65536
 cargo run --release --example v2_full_linear 8192
 cargo run --release --example v2_related 256
 cargo run --release --example v2_trail_search 4096 10000 8
-cargo run --release --example v3_sample -- wildan
+cargo run --release --example v3_sample -- wildanelis
 cargo run --release --example v3_probe
 cargo run --release --example v3_avalanche 128
 cargo run --release --example v3_differential 4096

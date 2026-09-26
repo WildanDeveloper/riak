@@ -49,7 +49,8 @@ are implemented in this repository. The independent v0.3 reference is
 `simulator/riak_v3.py`, with vectors in `tests/v3_vectors.rs` and
 `tests/v3_cipher_vectors.rs`. The design and open gates are recorded in
 `docs/riak_v3.md` and `docs/riak_v3_analysis.md`. Independent reviewers
-should start with `docs/external_review_packet.md`.
+should start with `docs/external_review_packet.md`. Key-handling and private
+reporting guidance is in `SECURITY.md`.
 
 ## Usage
 
@@ -145,7 +146,8 @@ cipher itself remains broken and is not suitable for real data.
 - `cargo run --release --example v2_related` — initial related-key smoke probe
 - `cargo run --release --example v2_trail_search` — measured differential-trail search
 - `python3 simulator/riak_v3.py` — independent v0.3 reference self-test
-- `cargo run --release --example v3_sample -- wildan` — labeled deterministic v0.3 sample
+- `cargo run --release --example v3_sample -- wildanelis` — ephemeral labeled
+  v0.3 sample; no key is embedded or printed
 - `cargo run --release --example v3_probe` — v0.3 structural/differential/linear probe
 - `cargo run --release --example v3_avalanche` — v0.3 plaintext/key diffusion smoke screen
 - `cargo run --release --example v3_differential` — v0.3 full-block differential screen
