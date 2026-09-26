@@ -69,27 +69,35 @@ CLI:
 
 ```text
 cargo build --release
-./target/release/riak keygen
-./target/release/riak enc in.txt out.riak --key <128-hex-chars>
-./target/release/riak dec out.riak in.txt  --key <128-hex-chars>
-# key-file alternative:
-./target/release/riak dec out.riak in.txt  --key-file key.hex
+./target/release/riak keygen > key.hex
+chmod 600 key.hex
+./target/release/riak v3enc in.txt out.riak3c --key-file key.hex
+./target/release/riak v3dec out.riak3c in.txt  --key-file key.hex
 ```
 
-The original commands above use the broken v0.1 format. Experimental commands
-are separate:
+Raw `--key` arguments are rejected so keys do not enter the process list.
+The broken v0.1 format is quarantined behind an opt-in Cargo feature and
+explicit research commands:
 
 ```text
-./target/release/riak v2enc in.txt out.riak2c --key <128-hex-chars>
-./target/release/riak v2dec out.riak2c in.txt  --key <128-hex-chars>
-./target/release/riak v3enc in.txt out.riak3c --key <128-hex-chars>
-./target/release/riak v3dec out.riak3c in.txt  --key <128-hex-chars>
+cargo build --release --features legacy-v1
+./target/release/riak legacy-enc in.txt out.riak --key-file key.hex
+./target/release/riak legacy-dec out.riak in.txt  --key-file key.hex
+```
+
+Without that feature, `legacy-enc`, `legacy-dec`, and the old `enc`/`dec` aliases
+are unavailable. Experimental v0.2 commands remain separate:
+
+```text
+./target/release/riak v2enc in.txt out.riak2c --key-file key.hex
+./target/release/riak v2dec out.riak2c in.txt  --key-file key.hex
 ```
 
 `RIAK2C` and `RIAK3C` are `magic(6) || nonce(12) || ciphertext || custom
 tag(16)`. The header is authenticated as AAD. On Unix, `--key-file` must be
-mode `0600` or stricter; `--key` may expose the key through process arguments.
-The v0.3 library equivalent is:
+mode `0600` or stricter, and the file is checked and read through one open
+file descriptor. CLI input is limited to 64 MiB. The v0.3 library equivalent
+is:
 
 ```rust
 use riak::v3::RiakV3Cipher;
@@ -102,13 +110,15 @@ let opened = cipher.open(&nonce, b"RIAK3C", &sealed)?;
 Both experimental formats remain unaudited. `RIAK3C` is the current research
 candidate, not a production replacement.
 
-File format: magic `RIAK1` ‖ nonce (12 B) ‖ MAC tag (16 B) ‖ ciphertext
-(encrypt-then-MAC: ciphertext/tag tampering is rejected; the legacy format
-does not authenticate the nonce).
+File format: magic `RIAK1` ‖ nonce (12 B) ‖ framed MAC tag (16 B) ‖ ciphertext.
+The legacy tag binds the magic, nonce, and ciphertext length; the v0.1 block
+cipher itself remains broken and is not suitable for real data.
 
 ## Testing
 
 - `scripts/ci.sh` — local check suite (build, tests, Python reference, v2 probes)
+- `cargo test --features legacy-v1 --test cli_legacy` — explicit broken-v0.1
+  quarantine and framed-header regression test
 - `cargo test` — unit tests + legacy vectors + 12 v0.2 and 12 v0.3 block
   vectors + 3 v0.2 and 4 v0.3 wrapper vectors + 128 generated v0.3 wrapper
   cross-check cases + v0.3 mode-audit cases,

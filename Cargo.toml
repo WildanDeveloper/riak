@@ -7,6 +7,10 @@ description = "Experimental custom RIAK cryptography research prototype"
 readme = "README.md"
 publish = false
 
+[features]
+default = []
+legacy-v1 = []
+
 [dependencies]
 
 [dev-dependencies]

@@ -41,7 +41,8 @@ fn v3_cli_roundtrip_and_tamper_rejection() {
         .args(["v3enc"])
         .arg(&input)
         .arg(&encrypted)
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(status.success());
@@ -56,7 +57,8 @@ fn v3_cli_roundtrip_and_tamper_rejection() {
         .args(["v3dec"])
         .arg(&encrypted)
         .arg(&output)
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(status.success());
@@ -108,7 +110,8 @@ fn v3_cli_roundtrip_and_tamper_rejection() {
         .args(["v3dec"])
         .arg(&tampered)
         .arg(dir.join("bad.txt"))
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(!status.success());
@@ -121,7 +124,8 @@ fn v3_cli_roundtrip_and_tamper_rejection() {
         .args(["v3dec"])
         .arg(&nonce_tampered)
         .arg(dir.join("bad-nonce.txt"))
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(!status.success());
@@ -134,10 +138,138 @@ fn v3_cli_roundtrip_and_tamper_rejection() {
         .args(["v3dec"])
         .arg(&bad_magic)
         .arg(dir.join("bad-magic.txt"))
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(!status.success());
+
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn oversized_input_is_rejected_before_processing() {
+    let dir = temp_dir().join("oversized");
+    fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.bin");
+    let key_file = dir.join("key.hex");
+    let key = hex_key();
+    fs::write(&key_file, format!("{key}\n")).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    let file = fs::File::create(&input).unwrap();
+    file.set_len(64 * 1024 * 1024 + 1).unwrap();
+    drop(file);
+
+    let status = Command::new(env!("CARGO_BIN_EXE_riak"))
+        .args(["v3enc"])
+        .arg(&input)
+        .arg(dir.join("out.riak3c"))
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(!status.success());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[test]
+fn raw_key_argument_is_rejected() {
+    let dir = temp_dir().join("raw-key");
+    fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.txt");
+    fs::write(&input, b"no argv key\n").unwrap();
+    let key = hex_key();
+    let status = Command::new(env!("CARGO_BIN_EXE_riak"))
+        .args(["v3enc"])
+        .arg(&input)
+        .arg(dir.join("out.riak3c"))
         .args(["--key", &key])
         .status()
         .unwrap();
     assert!(!status.success());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn key_file_symlink_is_rejected() {
+    use std::os::unix::fs::symlink;
+
+    let dir = temp_dir().join("key-link");
+    fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.txt");
+    let key_target = dir.join("key-target.hex");
+    let key_link = dir.join("key-link.hex");
+    fs::write(&input, b"key link\n").unwrap();
+    fs::write(&key_target, format!("{}\n", hex_key())).unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_target, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+    symlink(&key_target, &key_link).unwrap();
+    let status = Command::new(env!("CARGO_BIN_EXE_riak"))
+        .args(["v3enc"])
+        .arg(&input)
+        .arg(dir.join("out.riak3c"))
+        .args(["--key-file"])
+        .arg(&key_link)
+        .status()
+        .unwrap();
+    assert!(!status.success());
+    let _ = fs::remove_dir_all(dir);
+}
+
+#[cfg(unix)]
+#[test]
+fn output_replacement_does_not_follow_links() {
+    use std::os::unix::fs::symlink;
+
+    let dir = temp_dir().join("link-output");
+    fs::create_dir_all(&dir).unwrap();
+    let input = dir.join("input.txt");
+    let key_file = dir.join("key.hex");
+    fs::write(&input, b"link-safe output\n").unwrap();
+    let key = hex_key();
+    fs::write(&key_file, format!("{key}\n")).unwrap();
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).unwrap();
+    }
+
+    let victim = dir.join("symlink-victim");
+    fs::write(&victim, b"ORIGINAL").unwrap();
+    let symlink_output = dir.join("symlink-output.riak3c");
+    symlink(&victim, &symlink_output).unwrap();
+    let status = Command::new(env!("CARGO_BIN_EXE_riak"))
+        .args(["v3enc"])
+        .arg(&input)
+        .arg(&symlink_output)
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(fs::read(&victim).unwrap(), b"ORIGINAL");
+    assert_eq!(&fs::read(&symlink_output).unwrap()[..6], b"RIAK3C");
+
+    let hardlink_victim = dir.join("hardlink-victim");
+    fs::write(&hardlink_victim, b"ORIGINAL").unwrap();
+    let hardlink_output = dir.join("hardlink-output.riak3c");
+    fs::hard_link(&hardlink_victim, &hardlink_output).unwrap();
+    let status = Command::new(env!("CARGO_BIN_EXE_riak"))
+        .args(["v3enc"])
+        .arg(&input)
+        .arg(&hardlink_output)
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(fs::read(&hardlink_victim).unwrap(), b"ORIGINAL");
 
     let _ = fs::remove_dir_all(dir);
 }

@@ -152,9 +152,15 @@ returning plaintext. AAD, nonce, ciphertext length, and ciphertext content are
 all bound. The library API is one-shot and the caller supplies the complete
 AAD; the CLI authenticates `magic || nonce` as AAD.
 
+The CLI limits input files to 64 MiB, writes through a same-directory
+temporary file followed by atomic rename, and requires a permission-checked
+`--key-file`; raw `--key` arguments are rejected. The library wrappers enforce
+the same message-size ceiling before allocating authentication input.
+
 The mode and tag are still experimental because the custom block cipher and
 this mode have not passed the complete cryptanalysis, side-channel, and
-external-review gates.
+external-review gates. Nonce reuse remains forbidden and is not detected by
+the stateless library API.
 
 ## CLI format
 
@@ -166,8 +172,11 @@ external-review gates.
 
 `v3dec` checks the magic, authenticates the header as AAD, verifies the tag
 before decryption, and rejects modified nonce, ciphertext, tag, or header.
-`v0.1` (`RIAK1`) and v0.2 (`RIAK2C`) commands remain available as legacy
-research formats.
+`v0.1` (`RIAK1`) is only reachable through the opt-in `legacy-v1` Cargo
+feature and explicit `legacy-enc`/`legacy-dec` research commands; the old
+`enc`/`dec` aliases are rejected. The legacy tag binds the magic, nonce, and
+ciphertext length, but the v0.1 block cipher itself remains broken. v0.2
+(`RIAK2C`) remains an isolated research format.
 
 ## Deterministic labeled sample
 

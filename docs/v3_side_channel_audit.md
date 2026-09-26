@@ -25,10 +25,10 @@ Reviewed: `src/v3.rs` and the v0.3 calls in `src/main.rs`.
   allocation failure, and tag result occur outside the block-cipher core.
 - Tag comparison iterates over a fixed 16-byte array, accumulates XOR
   differences, and only branches after the complete comparison.
-- `Drop` performs best-effort zeroization with `black_box`; the v0.3 key
-  schedule and byte-key constructors also clear their local word arrays after
-  expansion. This is not a formal memory-safety guarantee against
-  compiler/platform copies.
+- `Drop` performs best-effort zeroization with `black_box` for v0.1, v0.2,
+  and v0.3; the key schedule and byte-key constructors also clear their local
+  word arrays after expansion. This is not a formal memory-safety guarantee
+  against compiler/platform copies.
 
 The source review found no intentional secret-dependent control flow in the
 v0.3 core. This does not cover compiler transformations, microarchitecture,

@@ -418,6 +418,9 @@ const MAC_CONTEXT: [u8; 16] = *b"RIAK3CUSTOM-v03\0";
 /// Size of the experimental v0.3 authentication tag.
 pub const AUTH_TAG_LEN: usize = 16;
 
+/// Maximum message size accepted by the wrapper.
+pub const MAX_MESSAGE_SIZE: usize = 64 * 1024 * 1024;
+
 /// Errors returned by the experimental v0.3 wrapper.
 #[derive(Debug, Clone, Copy, PartialEq, Eq)]
 pub enum V3Error {
@@ -440,6 +443,18 @@ impl std::fmt::Display for V3Error {
 }
 
 impl std::error::Error for V3Error {}
+
+fn check_lengths(aad_len: usize, data_len: usize) -> Result<(), V3Error> {
+    let overhead = MAC_CONTEXT.len() + 12 + 8 + 8;
+    let total = aad_len
+        .checked_add(data_len)
+        .and_then(|value| value.checked_add(overhead))
+        .ok_or(V3Error::LengthOverflow)?;
+    if aad_len > MAX_MESSAGE_SIZE || data_len > MAX_MESSAGE_SIZE || total > MAX_MESSAGE_SIZE + 64 {
+        return Err(V3Error::LengthOverflow);
+    }
+    Ok(())
+}
 
 /// Experimental custom confidentiality/authentication wrapper around v0.3.
 ///
@@ -482,6 +497,7 @@ impl RiakV3Cipher {
         aad: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>, V3Error> {
+        check_lengths(aad.len(), plaintext.len())?;
         let ciphertext = self.racik(nonce, plaintext, false)?;
         let tag = self.auth_tag(nonce, aad, &ciphertext)?;
         let capacity = ciphertext
@@ -503,6 +519,9 @@ impl RiakV3Cipher {
     ) -> Result<Vec<u8>, V3Error> {
         if sealed.len() < AUTH_TAG_LEN {
             return Err(V3Error::AuthenticationFailed);
+        }
+        if sealed.len() > MAX_MESSAGE_SIZE + AUTH_TAG_LEN || aad.len() > MAX_MESSAGE_SIZE {
+            return Err(V3Error::LengthOverflow);
         }
         let ciphertext_len = sealed.len() - AUTH_TAG_LEN;
         let (ciphertext, tag_bytes) = sealed.split_at(ciphertext_len);
@@ -587,6 +606,7 @@ impl RiakV3Cipher {
         aad: &[u8],
         ciphertext: &[u8],
     ) -> Result<[u8; AUTH_TAG_LEN], V3Error> {
+        check_lengths(aad.len(), ciphertext.len())?;
         let aad_len = u64::try_from(aad.len()).map_err(|_| V3Error::LengthOverflow)?;
         let ciphertext_len =
             u64::try_from(ciphertext.len()).map_err(|_| V3Error::LengthOverflow)?;
@@ -633,6 +653,18 @@ fn constant_time_equal(a: &[u8; AUTH_TAG_LEN], b: &[u8; AUTH_TAG_LEN]) -> bool {
 #[cfg(test)]
 mod wrapper_tests {
     use super::*;
+
+    #[test]
+    fn length_limit_rejects_oversized_input_without_allocating() {
+        assert_eq!(
+            check_lengths(MAX_MESSAGE_SIZE + 1, 0),
+            Err(V3Error::LengthOverflow)
+        );
+        assert_eq!(
+            check_lengths(0, MAX_MESSAGE_SIZE + 1),
+            Err(V3Error::LengthOverflow)
+        );
+    }
 
     #[test]
     fn custom_seal_open_roundtrip() {

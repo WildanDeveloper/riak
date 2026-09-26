@@ -126,12 +126,16 @@ impl RiakV2 {
                 key[i * 4 + 3],
             ]);
         }
-        Self::from_words(words)
+        let cipher = Self::from_words(words);
+        clear_words(&mut words);
+        cipher
     }
 
     /// Construct the candidate from sixteen key words.
-    pub fn from_words(key: [u32; 16]) -> Self {
-        Self::from_words_with_domain(key, DOMAIN_DEFAULT)
+    pub fn from_words(mut key: [u32; 16]) -> Self {
+        let cipher = Self::from_words_with_domain(key, DOMAIN_DEFAULT);
+        clear_words(&mut key);
+        cipher
     }
 
     /// Construct the candidate with a public domain separator.
@@ -218,9 +222,17 @@ impl RiakV2 {
     }
 }
 
+/// Best-effort clearing of a local key/state array.
+fn clear_words(words: &mut [u32; 16]) {
+    for word in words {
+        *word = 0;
+        std::hint::black_box(*word);
+    }
+}
+
 /// Candidate key schedule. It retains the v0.1 history-dependent shape but
 /// uses the v0.2 round function.
-fn key_schedule(key: [u32; 16], domain: u32) -> [u32; ROUNDS] {
+fn key_schedule(mut key: [u32; 16], domain: u32) -> [u32; ROUNDS] {
     let mut state = key;
     let mut round_keys = [0u32; ROUNDS];
 
@@ -232,6 +244,8 @@ fn key_schedule(key: [u32; 16], domain: u32) -> [u32; ROUNDS] {
         round_keys[r] = s ^ state[3] ^ state[9];
     }
 
+    clear_words(&mut key);
+    clear_words(&mut state);
     round_keys
 }
 
@@ -246,6 +260,9 @@ const MAC_CONTEXT: [u8; 16] = *b"RIAK2CUSTOM-v02\0";
 
 /// Size of the experimental authentication tag.
 pub const AUTH_TAG_LEN: usize = 16;
+
+/// Maximum message size accepted by the wrapper.
+pub const MAX_MESSAGE_SIZE: usize = 64 * 1024 * 1024;
 
 /// Errors returned by the experimental v0.2 confidentiality/authentication
 /// wrapper.
@@ -271,6 +288,18 @@ impl std::fmt::Display for V2Error {
 
 impl std::error::Error for V2Error {}
 
+fn check_lengths(aad_len: usize, data_len: usize) -> Result<(), V2Error> {
+    let overhead = MAC_CONTEXT.len() + 12 + 8 + 8;
+    let total = aad_len
+        .checked_add(data_len)
+        .and_then(|value| value.checked_add(overhead))
+        .ok_or(V2Error::LengthOverflow)?;
+    if aad_len > MAX_MESSAGE_SIZE || data_len > MAX_MESSAGE_SIZE || total > MAX_MESSAGE_SIZE + 64 {
+        return Err(V2Error::LengthOverflow);
+    }
+    Ok(())
+}
+
 /// Experimental custom confidentiality + authentication wrapper around the
 /// v0.2 block cipher.
 ///
@@ -294,15 +323,19 @@ impl RiakV2Cipher {
                 key[i * 4 + 3],
             ]);
         }
-        Self::from_words(words)
+        let cipher = Self::from_words(words);
+        clear_words(&mut words);
+        cipher
     }
 
     /// Construct the wrapper from sixteen key words.
-    pub fn from_words(key: [u32; 16]) -> Self {
-        Self {
+    pub fn from_words(mut key: [u32; 16]) -> Self {
+        let cipher = Self {
             enc: RiakV2::from_words_with_domain(key, DOMAIN_RACIK),
             mac: RiakV2::from_words_with_domain(key, DOMAIN_MAC),
-        }
+        };
+        clear_words(&mut key);
+        cipher
     }
 
     /// Encrypt and authenticate a message.
@@ -315,6 +348,7 @@ impl RiakV2Cipher {
         aad: &[u8],
         plaintext: &[u8],
     ) -> Result<Vec<u8>, V2Error> {
+        check_lengths(aad.len(), plaintext.len())?;
         let ciphertext = self.racik(nonce, plaintext, false)?;
         let tag = self.auth_tag(nonce, aad, &ciphertext)?;
         let output_capacity = ciphertext
@@ -337,6 +371,9 @@ impl RiakV2Cipher {
     ) -> Result<Vec<u8>, V2Error> {
         if sealed.len() < AUTH_TAG_LEN {
             return Err(V2Error::AuthenticationFailed);
+        }
+        if sealed.len() > MAX_MESSAGE_SIZE + AUTH_TAG_LEN || aad.len() > MAX_MESSAGE_SIZE {
+            return Err(V2Error::LengthOverflow);
         }
         let ciphertext_len = sealed.len() - AUTH_TAG_LEN;
         let (ciphertext, tag_bytes) = sealed.split_at(ciphertext_len);
@@ -416,6 +453,7 @@ impl RiakV2Cipher {
         aad: &[u8],
         ciphertext: &[u8],
     ) -> Result<[u8; AUTH_TAG_LEN], V2Error> {
+        check_lengths(aad.len(), ciphertext.len())?;
         let aad_len = u64::try_from(aad.len()).map_err(|_| V2Error::LengthOverflow)?;
         let ciphertext_len =
             u64::try_from(ciphertext.len()).map_err(|_| V2Error::LengthOverflow)?;
@@ -571,6 +609,18 @@ mod tests {
         RiakV2::from_words_with_domain(key, DOMAIN_DEFAULT).encrypt_block(&mut first);
         RiakV2::from_words_with_domain(key, DOMAIN_RACIK).encrypt_block(&mut second);
         assert_ne!(first, second);
+    }
+
+    #[test]
+    fn length_limit_rejects_oversized_input_without_allocating() {
+        assert_eq!(
+            check_lengths(MAX_MESSAGE_SIZE + 1, 0),
+            Err(V2Error::LengthOverflow)
+        );
+        assert_eq!(
+            check_lengths(0, MAX_MESSAGE_SIZE + 1),
+            Err(V2Error::LengthOverflow)
+        );
     }
 
     #[test]

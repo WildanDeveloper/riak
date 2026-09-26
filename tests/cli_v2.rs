@@ -41,7 +41,8 @@ fn v2_cli_roundtrip_and_tamper_rejection() {
         .args(["v2enc"])
         .arg(&input)
         .arg(&encrypted)
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(status.success());
@@ -50,7 +51,8 @@ fn v2_cli_roundtrip_and_tamper_rejection() {
         .args(["v2dec"])
         .arg(&encrypted)
         .arg(&output)
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(status.success());
@@ -86,7 +88,8 @@ fn v2_cli_roundtrip_and_tamper_rejection() {
         .args(["v2dec"])
         .arg(&tampered)
         .arg(dir.join("bad.txt"))
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(!status.success());
@@ -99,7 +102,8 @@ fn v2_cli_roundtrip_and_tamper_rejection() {
         .args(["v2dec"])
         .arg(&nonce_tampered)
         .arg(dir.join("bad-nonce.txt"))
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(!status.success());
@@ -112,7 +116,8 @@ fn v2_cli_roundtrip_and_tamper_rejection() {
         .args(["v2dec"])
         .arg(&bad_magic)
         .arg(dir.join("bad-magic.txt"))
-        .args(["--key", &key])
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
     assert!(!status.success());

@@ -40,6 +40,9 @@ pub const PRIMES: [u32; 36] = [
 /// Golden-ratio constant (odd → multiplication is always bijective mod 2^32).
 const MUL: u32 = 0x9E37_79B9;
 
+/// Domain separation for the framed legacy MAC.
+const LEGACY_MAC_CONTEXT: &[u8] = b"RIAK1-FRAMED\0\0\0\0";
+
 /// Round function F (32-bit → 32-bit), fully constant-time:
 /// xor key → add constant → multiply constant → rotation interference.
 #[inline(always)]
@@ -63,6 +66,15 @@ pub struct Riak {
     rk: [u32; ROUNDS],
 }
 
+impl Drop for Riak {
+    fn drop(&mut self) {
+        for round_key in &mut self.rk {
+            *round_key = 0;
+            std::hint::black_box(*round_key);
+        }
+    }
+}
+
 impl Riak {
     /// Build the cipher from a 512-bit key (64 bytes, big-endian per word).
     pub fn new(key: &[u8; 64]) -> Self {
@@ -75,12 +87,16 @@ impl Riak {
                 key[i * 4 + 3],
             ]);
         }
-        Self::from_words(kw)
+        let cipher = Self::from_words(kw);
+        clear_words(&mut kw);
+        cipher
     }
 
     /// Build the cipher from the key as 16 u32 words.
-    pub fn from_words(key: [u32; 16]) -> Self {
-        Self { rk: key_schedule(key) }
+    pub fn from_words(mut key: [u32; 16]) -> Self {
+        let round_keys = key_schedule(key);
+        clear_words(&mut key);
+        Self { rk: round_keys }
     }
 
     /// Encrypt one 128-bit block (4 words, in place).
@@ -212,9 +228,9 @@ impl Riak {
     /// (`E_K(len) ‖ CBC-chain ‖ E_K(final)`). The length block blocks
     /// extension attacks for variable-length messages.
     ///
-    /// Caveat: this is a basic experiment MAC. It provides integrity
-    /// only against an attacker who cannot choose messages adaptively.
-    /// Full security requires an AEAD construction — future work.
+    /// Caveat: this is a basic experiment MAC over exactly `data`. It does
+    /// not bind an external file header; use [`Self::mac_framed`] for framed
+    /// formats. Full security requires an AEAD construction — future work.
     pub fn mac(&self, data: &[u8]) -> [u8; 16] {
         // Length block: 64-bit big-endian bit length, left half zeros.
         let mut chain = [0u32; 4];
@@ -240,21 +256,69 @@ impl Riak {
         out
     }
 
+    /// Compute a legacy MAC that binds a header, nonce, and ciphertext.
+    ///
+    /// The raw [`Self::mac`] function is retained for research vectors, but it
+    /// does not authenticate a surrounding file header. Callers that persist
+    /// a framed format should use this method instead.
+    pub fn mac_framed(
+        &self,
+        header: &[u8],
+        nonce: &[u8; 12],
+        ciphertext: &[u8],
+    ) -> [u8; 16] {
+        let header_len = (header.len() as u64).to_le_bytes();
+        let ciphertext_len = (ciphertext.len() as u64).to_le_bytes();
+        let mut framed = Vec::with_capacity(
+            LEGACY_MAC_CONTEXT.len() + 16 + header.len() + nonce.len() + ciphertext.len(),
+        );
+        framed.extend_from_slice(LEGACY_MAC_CONTEXT);
+        framed.extend_from_slice(&header_len);
+        framed.extend_from_slice(&ciphertext_len);
+        framed.extend_from_slice(header);
+        framed.extend_from_slice(nonce);
+        framed.extend_from_slice(ciphertext);
+        self.mac(&framed)
+    }
+
+    /// Verify a framed legacy MAC in constant time.
+    pub fn verify_framed(
+        &self,
+        header: &[u8],
+        nonce: &[u8; 12],
+        ciphertext: &[u8],
+        tag: &[u8; 16],
+    ) -> bool {
+        let expected = self.mac_framed(header, nonce, ciphertext);
+        let mut difference = 0u8;
+        for (left, right) in expected.iter().zip(tag.iter()) {
+            difference |= left ^ right;
+        }
+        difference == 0
+    }
+
     /// Verify a MAC in constant time (no early exit on mismatch).
     pub fn verify_mac(&self, data: &[u8], tag: &[u8; 16]) -> bool {
         let expected = self.mac(data);
-        let mut diff = 0u8;
-        for (a, b) in expected.iter().zip(tag.iter()) {
-            diff |= a ^ b;
+        let mut difference = 0u8;
+        for (left, right) in expected.iter().zip(tag.iter()) {
+            difference |= left ^ right;
         }
-        diff == 0
+        difference == 0
+    }
+}
+
+fn clear_words(words: &mut [u32; 16]) {
+    for word in words {
+        *word = 0;
+        std::hint::black_box(*word);
     }
 }
 
 /// Key schedule (see krip.md): a 16-word state with history-dependent
 /// feedback; each round key mixes words already changed by previous
 /// rounds.
-fn key_schedule(key: [u32; 16]) -> [u32; ROUNDS] {
+fn key_schedule(mut key: [u32; 16]) -> [u32; ROUNDS] {
     let mut a = key;
     let mut rk = [0u32; ROUNDS];
     for r in 0..ROUNDS {
@@ -264,6 +328,8 @@ fn key_schedule(key: [u32; 16]) -> [u32; ROUNDS] {
         a.rotate_left(1);
         rk[r] = s ^ a[3] ^ a[9];
     }
+    clear_words(&mut key);
+    clear_words(&mut a);
     rk
 }
 
@@ -329,6 +395,20 @@ mod tests {
         assert!(!c.verify_mac(data, &tampered));
         // MAC is deterministic and length-sensitive (length block).
         assert_ne!(c.mac(&data[..13]), tag);
+    }
+
+    #[test]
+    fn framed_mac_binds_header_and_nonce() {
+        let c = Riak::from_words([0x33u32; 16]);
+        let nonce = [0x44u8; 12];
+        let header = b"RIAK1\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44\x44";
+        let ciphertext = b"ciphertext";
+        let tag = c.mac_framed(header, &nonce, ciphertext);
+        assert!(c.verify_framed(header, &nonce, ciphertext, &tag));
+        let mut changed_nonce = nonce;
+        changed_nonce[0] ^= 1;
+        assert!(!c.verify_framed(header, &changed_nonce, ciphertext, &tag));
+        assert!(!c.verify_framed(b"RIAK2", &nonce, ciphertext, &tag));
     }
 
     #[test]

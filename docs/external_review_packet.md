@@ -117,8 +117,8 @@ Review specifically:
 - tag forgery, truncation, extension, and wrong-key behavior;
 - whether the custom mode has a justified security argument;
 - release-mode error behavior and whether any plaintext is exposed on failure;
-- CLI key-file permission handling (`--key-file` rejects group/world access on
-  Unix; `--key` may appear in process arguments).
+- CLI key-file permission handling (`--key-file` is required; raw `--key` is
+  rejected; the file is checked and read through one descriptor).
 
 ## 6. Reproduction commands
 
@@ -126,6 +126,7 @@ From `/root/riak`:
 
 ```text
 cargo test --release --all-targets
+cargo test --release --features legacy-v1 --test cli_legacy
 python3 simulator/riak_v3.py
 scripts/ci.sh
 ```

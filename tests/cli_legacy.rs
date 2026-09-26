@@ -1,3 +1,5 @@
+#![cfg(feature = "legacy-v1")]
+
 use std::fs;
 use std::process::Command;
 use std::time::{SystemTime, UNIX_EPOCH};
@@ -11,7 +13,7 @@ fn hex_key() -> String {
 }
 
 #[test]
-fn legacy_cli_still_roundtrips() {
+fn legacy_cli_is_explicit_and_authenticates_its_header() {
     let stamp = SystemTime::now()
         .duration_since(UNIX_EPOCH)
         .unwrap()
@@ -21,26 +23,59 @@ fn legacy_cli_still_roundtrips() {
     let input = dir.join("input");
     let encrypted = dir.join("input.riak");
     let output = dir.join("output");
+    let key_file = dir.join("key.hex");
     fs::write(&input, b"legacy compatibility test\n").unwrap();
+    fs::write(&key_file, format!("{}\n", hex_key())).unwrap();
+    #[cfg(unix)]
+    {
+        use std::os::unix::fs::PermissionsExt;
+        fs::set_permissions(&key_file, fs::Permissions::from_mode(0o600)).unwrap();
+    }
 
-    let key = hex_key();
     let binary = env!("CARGO_BIN_EXE_riak");
+    let status = Command::new(binary)
+        .args(["legacy-enc"])
+        .arg(&input)
+        .arg(&encrypted)
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    let status = Command::new(binary)
+        .args(["legacy-dec"])
+        .arg(&encrypted)
+        .arg(&output)
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(status.success());
+    assert_eq!(fs::read(output).unwrap(), fs::read(&input).unwrap());
+
+    let mut tampered = fs::read(&encrypted).unwrap();
+    tampered[5] ^= 1;
+    let tampered_path = dir.join("nonce-tampered.riak");
+    fs::write(&tampered_path, tampered).unwrap();
+    let status = Command::new(binary)
+        .args(["legacy-dec"])
+        .arg(&tampered_path)
+        .arg(dir.join("bad-nonce.txt"))
+        .args(["--key-file"])
+        .arg(&key_file)
+        .status()
+        .unwrap();
+    assert!(!status.success(), "legacy header/nonce must be authenticated");
+
     let status = Command::new(binary)
         .args(["enc"])
         .arg(&input)
-        .arg(&encrypted)
-        .args(["--key", &key])
+        .arg(dir.join("disabled.riak"))
+        .args(["--key-file"])
+        .arg(&key_file)
         .status()
         .unwrap();
-    assert!(status.success());
-    let status = Command::new(binary)
-        .args(["dec"])
-        .arg(&encrypted)
-        .arg(&output)
-        .args(["--key", &key])
-        .status()
-        .unwrap();
-    assert!(status.success());
-    assert_eq!(fs::read(output).unwrap(), fs::read(input).unwrap());
+    assert!(!status.success(), "legacy enc alias must not be available");
+
     let _ = fs::remove_dir_all(dir);
 }

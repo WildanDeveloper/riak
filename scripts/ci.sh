@@ -2,7 +2,9 @@
 set -euo pipefail
 
 cargo check --all-targets
+cargo check --all-targets --features legacy-v1
 cargo test --release --all-targets
+cargo test --release --features legacy-v1 --test cli_legacy
 python3 simulator/riak_v2.py
 python3 simulator/riak_v3.py
 python3 simulator/generate_v3_vectors.py

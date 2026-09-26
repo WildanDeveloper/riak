@@ -214,8 +214,11 @@ failure, not a proof that all related-key trails are absent.
 - The v0.3 state transition binds both prior state and absorbed ciphertext;
   it does not use the v0.1 `Z XOR C = P` collapse.
 - Constant-time tag comparison uses a fixed 16-byte loop.
-- Output files are created with mode `0600` on Unix; CLI key files are rejected
-  if group/world readable, while `--key` remains a process-list risk.
+- Output files are written through a same-directory temporary file and
+  atomic rename with mode `0600` on Unix; symlink/hardlink targets are not
+  followed. CLI key files are rejected if group/world readable, checked and
+  read through one descriptor, symlinks are rejected, and raw `--key` is
+  rejected. CLI input is limited to 64 MiB.
 
 Nonce reuse remains forbidden and is not made safe by the custom tag.
 
@@ -236,6 +239,28 @@ The four F calls per outer round are a deliberate diffusion/performance
 tradeoff. The `x4` API explicitly unrolls four independent lanes; this improved
 measured block throughput without changing single-block or wrapper semantics.
 This benchmark is not a constant-time measurement.
+
+## Audit remediation after `/root/severity.riak`
+
+The legacy/operational findings were addressed as follows:
+
+- v0.1 `enc`/`dec` aliases are rejected; the broken format is reachable only
+  through the opt-in `legacy-v1` feature and explicit `legacy-enc`/`legacy-dec`
+  commands.
+- The legacy CLI tag now binds the magic/header, nonce, and ciphertext length.
+  The v0.1 primitive and its `Z XOR C = P` mode remain intentionally broken;
+  this is quarantine, not a cryptographic repair.
+- Output files use a same-directory `create_new` temporary file followed by
+  atomic rename, so symlink and hardlink targets are not followed.
+- Raw `--key` argv is rejected. Key files are opened once, checked on that file
+  descriptor, and read from that same descriptor.
+- CLI and v0.2/v0.3 wrapper inputs have a 64 MiB ceiling.
+- v0.1, v0.2, and v0.3 now perform best-effort round-key/local-word clearing.
+
+Nonce reuse remains an API-level prohibition for the stateless library; it
+cannot be detected reliably without stateful nonce tracking. The v0.1 linear
+break, v0.1 mode collapse, and the custom v0.3 security gates are not claimed
+fixed by these operational mitigations.
 
 ## Open security gates
 
