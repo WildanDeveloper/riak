@@ -41,20 +41,31 @@ silently overwritten.
 full-diffusion sub-updates per round. `riak::v3::RiakV3Cipher` and the
 `v3enc`/`v3dec` commands are isolated research interfaces. v0.3 is still
 **experimental**: it has passed implementation/vector checks, exact
-reduced-width DDT/LAT and trail-activity screens, and an empirical mode/tag
-screen, but not the full-width differential, linear-hull, boomerang,
-related-key, side-channel, formal mode/tag, or external-review gates.
+reduced-width DDT/LAT and trail-activity screens, a key-schedule related-key
+screen, an impossible-differential and convergence screen, differential fuzzing
+against an independent reference, an empirical mode/tag screen, and a
+repeatable assembly side-channel screen, but **not** the full-width
+differential, linear-hull, boomerang, related-key, statistical
+leakage-detection, formal mode/tag, or external-review gates.
 
 There are no runtime cryptography dependencies; the cipher, mode, and tag code
 are implemented in this repository. The independent v0.3 reference is
 `simulator/riak_v3.py`, with vectors in `tests/v3_vectors.rs` and
 `tests/v3_cipher_vectors.rs`. The design and open gates are recorded in
-`docs/riak_v3.md` and `docs/riak_v3_analysis.md`; the exact differential and
-linear screens are in `docs/riak_v3_ddt_lat.md` with the tool under
-`analysis/ddt-probe/`, and the wrapper screen is in
-`docs/riak_v3_mode_analysis.md`. Independent reviewers
-should start with `docs/external_review_packet.md`. Key-handling and private
-reporting guidance is in `SECURITY.md`.
+`docs/riak_v3.md` and `docs/riak_v3_analysis.md`. The analysis records are:
+
+| area | document |
+|---|---|
+| exact reduced-width DDT/LAT | `docs/riak_v3_ddt_lat.md` |
+| key-schedule related keys | `docs/riak_v3_related_key.md` |
+| impossible differential and convergence | `docs/riak_v3_impossible_boomerang.md` |
+| wrapper mode and tag | `docs/riak_v3_mode_analysis.md` |
+| Rust vs Python differential fuzzing | `docs/riak_v3_fuzzing.md` |
+| side channel | `docs/v3_side_channel_audit.md` |
+
+The exact differential and linear tool is under `analysis/ddt-probe/`.
+Independent reviewers should start with `docs/external_review_packet.md`.
+Key-handling and private reporting guidance is in `SECURITY.md`.
 
 ## Usage
 

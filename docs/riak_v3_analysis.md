@@ -276,6 +276,21 @@ The legacy/operational findings were addressed as follows:
   confidentiality/authentication instances show no output relation. This is not a
   formal mode/tag argument, and nonce reuse remains a real confidentiality
   failure for stateless callers.
+- Key-schedule related-key analysis (`docs/riak_v3_related_key.md`): across all
+  512 single-bit differences, 9 structured multi-bit families, 3 base keys and
+  3 domains there are **zero** round-key cancellation cells, and the mean
+  round-key difference weight is **16.00 of 32 bits**, matching a uniformly
+  random difference. The schedule is also provably non-affine in the master key.
+  The `2^512` difference space and adaptive multi-key strategies are not covered.
+- Impossible-differential and convergence screen
+  (`docs/riak_v3_impossible_boomerang.md`): 143 structured differences x 20000
+  pairs gave **zero** zero-output-difference observations, and the best output
+  difference count stays at 1 for every round count measured. This is absence of
+  observation, not a bound.
+- Differential fuzzing (`docs/riak_v3_fuzzing.md`): the Rust implementation and
+  the independent Python reference agree on ciphertext, tag and round-trip
+  decryption across **300000** generated cases covering partial-block, empty and
+  repeated-key shapes. The harness now runs in CI.
 
 Nonce reuse on the legacy stateless API remains an API-level prohibition; it
 cannot be detected reliably without stateful nonce tracking. The v0.1 linear

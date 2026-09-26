@@ -28,10 +28,18 @@ Relevant source:
 - `docs/riak_v3.md`
 - `docs/riak_v3_analysis.md`
 - `docs/riak_v3_ddt_lat.md` (exact reduced-width DDT/LAT screen)
+- `docs/riak_v3_related_key.md` (key-schedule related-key screen)
+- `docs/riak_v3_impossible_boomerang.md` (impossible-differential and
+  convergence screen)
 - `docs/riak_v3_mode_analysis.md` (wrapper mode/tag empirical screen)
+- `docs/riak_v3_fuzzing.md` (Rust vs Python differential fuzzing)
 - `docs/v3_side_channel_audit.md`
 - `analysis/ddt-probe/` (exact DDT/LAT and trail-activity tool)
 - `examples/v3_mode_analysis.rs`
+- `examples/v3_related_key_schedule.rs`
+- `examples/v3_impossible_boomerang.rs`
+- `examples/v3_fuzz_generate.rs` and `simulator/fuzz_diff_v3.py`
+- `scripts/asm_audit.sh` (repeatable assembly side-channel screen)
 - `examples/v3_related_multibit.rs`
 - `tests/v3_fuzz_vectors.rs` and `simulator/generate_v3_vectors.py`
 
@@ -89,6 +97,46 @@ linear hull bounds, boomerang, full-width related-key analysis of the schedule,
 and any formal mode/tag argument. Reduced-width results do not transfer upward;
 a small reduced-width number is not evidence of safety. A reviewer should treat
 the full-width families as unanalyzed.
+
+### Additional screens already run
+
+Three further screens were completed after the reduced-width work. Reviewers
+should read them for what they rule out, not for what they prove.
+
+**Key-schedule related keys** (`docs/riak_v3_related_key.md`). The schedule was
+reconstructed from the specification and cross-checked against the shipped
+implementation, then tested for round-key cancellation across all 512 single-bit
+differences, 9 structured multi-bit families, 3 base keys and 3 domains:
+
+- zero round-key cancellation cells, so the weakness that rejected v0.3-r1 does
+  not appear;
+- mean round-key difference weight of **16.00 of 32 bits** over 110592 cells,
+  matching a uniformly random difference, with only 0.093% of cells below weight
+  8;
+- the schedule is provably **non-affine** in the master key, since one fixed
+  difference yields different round-0 differences under different base keys.
+
+This does not cover the `2^512` difference space and does not model adaptive or
+multi-key strategies.
+
+**Impossible differentials and convergence**
+(`docs/riak_v3_impossible_boomerang.md`). 143 structured input differences x
+20000 random pairs gave **0** cases of a zero output difference, so no impossible
+differential was observed. The best-matching output-difference count stays at 1
+for 1, 2, 4, 6, 8, 12, 16, 20 and 24 rounds, so the output difference shows no
+convergence. Neither measurement is a bound: 4096 samples cannot see
+probabilities below roughly `2^-11`, and no boomerang distinguisher was built.
+
+**Wrapper and implementation** (`docs/riak_v3_mode_analysis.md`,
+`docs/riak_v3_fuzzing.md`). The Rust implementation and the independent Python
+reference agree on ciphertext, tag and round-trip decryption across **300000**
+generated cases, including partial-block, empty and repeated-key shapes.
+
+**Assembly side channel** (`scripts/asm_audit.sh`). A repeatable static screen
+now runs in CI: no integer division in the core, and conditional branches are
+listed for review. It is a static screen on one toolchain, not a constant-time
+guarantee, and statistical leakage testing with `dudect` or `ctgrind` is still
+outstanding.
 
 ## 4. Key schedule to review
 

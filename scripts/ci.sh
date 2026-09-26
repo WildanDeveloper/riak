@@ -28,6 +28,19 @@ cargo run --release --example v3_related_multibit 256
 cargo run --release --example v3_timing
 cargo run --release --example v3_bench
 cargo run --release --example v3_mode_analysis
+cargo run --release --example v3_related_key_schedule
+cargo run --release --example v3_impossible_boomerang
+
+# Differential fuzzing: the Rust implementation and the independent Python
+# reference must agree on ciphertext, tag, and round-trip decryption. The case
+# files are written to a temporary directory and removed afterwards, so a local
+# run leaves no artifacts behind.
+fuzz_dir="$(mktemp -d)"
+trap 'rm -rf "$fuzz_dir"' EXIT
+for seed in 1 2 3; do
+  cargo run --release --example v3_fuzz_generate -- 20000 "$seed" "$fuzz_dir/cases-$seed.txt"
+  python3 simulator/fuzz_diff_v3.py "$fuzz_dir/cases-$seed.txt"
+done
 
 # Exact reduced-width DDT/LAT and trail-activity screen. The assertions are
 # regression gates against the values recorded in docs/riak_v3_ddt_lat.md, not
