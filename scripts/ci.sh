@@ -28,4 +28,12 @@ cargo run --release --example v3_related_multibit 256
 cargo run --release --example v3_timing
 cargo run --release --example v3_bench
 
+# Exact reduced-width DDT/LAT and trail-activity screen. The assertions are
+# regression gates against the values recorded in docs/riak_v3_ddt_lat.md, not
+# security claims. Full measurements are run manually at a higher width.
+cargo test --release --manifest-path analysis/ddt-probe/Cargo.toml
+cargo run --release --manifest-path analysis/ddt-probe/Cargo.toml -- \
+  --width 12 --key-independence \
+  --assert-diff-log2 4 --assert-zero-log2 1 --assert-corr-log2 2
+
 printf '%s\n' "RIAK local CI checks: PASS"

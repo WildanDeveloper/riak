@@ -1,4 +1,5 @@
 /target
+/analysis/ddt-probe/target
 __pycache__/
 *.py[cod]
 *.key

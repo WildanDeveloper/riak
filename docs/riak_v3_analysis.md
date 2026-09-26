@@ -259,6 +259,16 @@ The legacy/operational findings were addressed as follows:
 - v0.2/v0.3 expose `seal_with_sequence` backed by `NonceSequence` for
   stateful counter nonces; the legacy caller-supplied nonce API remains
   misuse-sensitive by design.
+- The exact reduced-width DDT/LAT screen in `docs/riak_v3_ddt_lat.md` closes two
+  previously open measurement items and adds one structural result:
+  - the DDT and the absolute LAT are **key-independent** for this construction
+    (`F(x,k,c) = H((x ^ k) + c)`), so one measurement covers every round key;
+  - the zero column of the DDT is **exactly empty**, so an active F evaluation
+    can never absorb a difference;
+  - the minimum number of active F evaluations in any 24-round trail is **48 of
+    96**, computed by dynamic program under an optimistic attacker model.
+  The full-width differential, linear-hull, boomerang, and related-key
+  families remain open; the reduced-width results do not transfer upward.
 
 Nonce reuse on the legacy stateless API remains an API-level prohibition; it
 cannot be detected reliably without stateful nonce tracking. The v0.1 linear

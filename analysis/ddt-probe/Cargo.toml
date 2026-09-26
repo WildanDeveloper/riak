@@ -1,0 +1,16 @@
+[package]
+name = "riak-ddt-probe"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.85"
+description = "Independent reduced-width differential and linear probe for the RIAK round bijection (research tool, not a library)"
+publish = false
+
+[dependencies]
+# Path dependency is used only to cross-check that the specification-derived
+# copy of the round function in this tool matches the shipped implementation.
+riak = { path = "../.." }
+
+[[bin]]
+name = "riak-ddt-probe"
+path = "src/main.rs"

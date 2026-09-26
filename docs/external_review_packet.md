@@ -27,7 +27,9 @@ Relevant source:
 - `simulator/riak_v3.py`
 - `docs/riak_v3.md`
 - `docs/riak_v3_analysis.md`
+- `docs/riak_v3_ddt_lat.md` (exact reduced-width DDT/LAT screen)
 - `docs/v3_side_channel_audit.md`
+- `analysis/ddt-probe/` (exact DDT/LAT and trail-activity tool)
 - `examples/v3_related_multibit.rs`
 - `tests/v3_fuzz_vectors.rs` and `simulator/generate_v3_vectors.py`
 
@@ -59,6 +61,32 @@ y3 = x3 XOR F(y2 XOR y1 XOR y0, k, c3)
 Reverse the four updates to decrypt. Please look for linear invariants,
 impossible/boomerang trails, differential propagation through sequential
 updates, and any dependency that survives multiple outer rounds.
+
+### What the project already measured, and what it did not
+
+`analysis/ddt-probe` computes the **exact** DDT and LAT of the keyless round
+bijection truncated to `w < 32` bits, plus an exact dynamic program for the
+minimum trail activity. Recorded in `docs/riak_v3_ddt_lat.md`:
+
+- `F(x,k,c) = H((x XOR k) + c)`, and `x -> x XOR k` preserves every XOR
+  difference. Therefore **`DDT[dx][dy]` is identical for every round key**, and
+  the LAT correlation changes only by the sign factor `(-1)^<a,k>`. Verified
+  numerically. Reviewers do not need a per-key sweep for this construction.
+  This says nothing about related-key behaviour of the key schedule.
+- The DDT **zero column is exactly empty**: `F` is a permutation, so no active
+  evaluation absorbs a difference.
+- The minimum number of active F evaluations in any 24-round trail is **48 of
+  96**, under a model that grants the attacker the most favourable output value
+  for free.
+- Reduced-width DDT maxima are within about 2x of a random-permutation
+  reference. Reduced-width LAT maxima are about 3.4x to 5.6x above that
+  reference, with low-weight masks.
+
+**Not** measured, and still the main open work: full-width differential and
+linear hull bounds, boomerang, full-width related-key analysis of the schedule,
+and any formal mode/tag argument. Reduced-width results do not transfer upward;
+a small reduced-width number is not evidence of safety. A reviewer should treat
+the full-width families as unanalyzed.
 
 ## 4. Key schedule to review
 
