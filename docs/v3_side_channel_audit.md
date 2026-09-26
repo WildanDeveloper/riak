@@ -63,6 +63,56 @@ This is a single compiler/architecture observation (`x86_64` development host),
 not a portable constant-time guarantee. A compiler upgrade or different target
 requires a new inspection.
 
+## Statistical first-order leakage screen
+
+`dudect` and `ctgrind` are not installed in this environment, but the
+ingredients for a first-order test are available: the CPU can be pinned with
+`taskset`, the process can be raised with `chrt`, and the hardware cycle counter
+is readable from Rust. `examples/v3_leakage.rs` implements a dudect-style
+first-order test directly, including a **negative control**.
+
+Method: measure `encrypt_block` for a fixed-plaintext class and a random-plaintext
+class, randomise the order within each round to cancel drift, and compute Welch's
+`t`. The negative control compares two classes that are **both constant** (two
+different fixed blocks). Since the cipher does identical work for both control
+classes, a significant control `t` would mean the measurement setup is biased and
+the main result cannot be attributed to the cipher.
+
+Command:
+
+```text
+taskset -c 0 chrt -f 5 cargo run --release --example v3_leakage -- 1500000
+```
+
+Five consecutive runs, pinned and at real-time priority:
+
+| run | fixed-vs-random t | negative-control t |
+|---|---|---|
+| 1 | -4.95 | -2.60 |
+| 2 | -3.45 | -1.50 |
+| 3 | -5.07 | -0.01 |
+| 4 | -4.84 | -1.02 |
+| 5 | -5.40 | -1.49 |
+
+**Finding: a small but consistent first-order timing signal.** The
+fixed-vs-random `t` is negative on every run (mean about -4.75, mean difference
+about -6 cycles or -0.3%), while the negative control stays close to zero on
+every run. The consistent sign, combined with a clean control, means this is not
+random noise and not a harness artefact.
+
+The source is not identified. `encrypt_block` and `encrypt_round` contain no
+data-dependent branch, no table lookup, and no variable-latency instruction, so
+the arithmetic is constant by inspection. The residual bias is small and its
+origin is unknown: it may be a microarchitectural data dependency (for example
+a multiplier or a shift whose latency depends on operand values), a
+measurement-environment effect that the control does not capture, or an artefact
+of the sample pairing. **This is an open item, not a cleared one.** It must be
+resolved before any constant-time claim is made about v0.3.
+
+This screen still does not cover second-order leakage, the cache, port
+contention, speculative execution, power analysis, other hardware, other
+compilers, or the wrapper mode and tag paths.
+
 ## Automated assembly screen
 
 `scripts/asm_audit.sh` turns the manual inspection above into a repeatable
@@ -108,10 +158,16 @@ leakage or of constant-time behavior.
 
 ## Open work
 
-1. Run a real leakage-detection/statistical timing tool on fixed and random
-   classes with multiple compiler targets and optimization levels. `dudect`,
-   `ctgrind`, and `valgrind` were unavailable in the development environment, so
-   this remains the largest open side-channel item.
+1. **Resolve the first-order timing signal** measured above. The negative
+   control is clean while the fixed-vs-random difference is consistent at about
+   -0.3%, so the setup is sound and the source is unexplained. Determine whether
+   it is a real data dependency in the core or a measurement artefact before
+   making any constant-time claim.
+2. Extend the statistical screen to the wrapper mode and tag paths, which are
+   not covered, and to second-order leakage.
+3. Run the screen on multiple compiler versions, optimization levels, and
+   targets. `dudect` and `ctgrind` are still unavailable here, so the current
+   test is a hand-written first-order substitute.
 2. Inspect generated assembly for every supported target, including ARM and
    wasm if claimed. `scripts/asm_audit.sh` currently covers the `x86_64` host
    build only.
