@@ -27,6 +27,7 @@ cargo run --release --example v3_key_schedule_analysis 256
 cargo run --release --example v3_related_multibit 256
 cargo run --release --example v3_timing
 cargo run --release --example v3_bench
+cargo run --release --example v3_mode_analysis
 
 # Exact reduced-width DDT/LAT and trail-activity screen. The assertions are
 # regression gates against the values recorded in docs/riak_v3_ddt_lat.md, not

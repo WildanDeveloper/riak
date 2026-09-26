@@ -269,6 +269,13 @@ The legacy/operational findings were addressed as follows:
     96**, computed by dynamic program under an optimistic attacker model.
   The full-width differential, linear-hull, boomerang, and related-key
   families remain open; the reduced-width results do not transfer upward.
+- The wrapper mode and tag were screened empirically
+  (`docs/riak_v3_mode_analysis.md`): length binding rejects every truncation and
+  extension, the ciphertext-chaining dependency was isolated by a regression
+  test, keystream prefixes show no collision across 4096 nonces, and the
+  confidentiality/authentication instances show no output relation. This is not a
+  formal mode/tag argument, and nonce reuse remains a real confidentiality
+  failure for stateless callers.
 
 Nonce reuse on the legacy stateless API remains an API-level prohibition; it
 cannot be detected reliably without stateful nonce tracking. The v0.1 linear

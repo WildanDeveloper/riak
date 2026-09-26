@@ -28,8 +28,10 @@ Relevant source:
 - `docs/riak_v3.md`
 - `docs/riak_v3_analysis.md`
 - `docs/riak_v3_ddt_lat.md` (exact reduced-width DDT/LAT screen)
+- `docs/riak_v3_mode_analysis.md` (wrapper mode/tag empirical screen)
 - `docs/v3_side_channel_audit.md`
 - `analysis/ddt-probe/` (exact DDT/LAT and trail-activity tool)
+- `examples/v3_mode_analysis.rs`
 - `examples/v3_related_multibit.rs`
 - `tests/v3_fuzz_vectors.rs` and `simulator/generate_v3_vectors.py`
 

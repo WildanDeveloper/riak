@@ -107,6 +107,138 @@ fn chaining_uses_absorbed_ciphertext_and_nonce_reuse_is_visible() {
 }
 
 #[test]
+fn truncation_and_extension_are_rejected() {
+    let cipher = cipher();
+    let nonce = [0x77u8; 12];
+    let plaintext: Vec<u8> = (0..80u32).map(|i| (i * 7) as u8).collect();
+    let sealed = cipher.seal(&nonce, b"aad", &plaintext).unwrap();
+
+    // Every truncation must fail: the tag binds the ciphertext length, so a
+    // short sealed value cannot be reinterpreted as a shorter message.
+    for cut in 1..sealed.len() {
+        let truncated = &sealed[..cut];
+        let result = cipher.open(&nonce, b"aad", truncated);
+        assert!(
+            result.is_err(),
+            "truncating to {cut} bytes was accepted; length binding is broken"
+        );
+    }
+
+    // Extending the ciphertext must fail as well.
+    let mut extended = sealed.clone();
+    extended[0] ^= 0x00; // no-op byte write, then append
+    extended.push(0x00);
+    assert!(cipher.open(&nonce, b"aad", &extended).is_err());
+    let mut extended_block = sealed.clone();
+    extended_block.extend_from_slice(&[0u8; 16]);
+    assert!(cipher.open(&nonce, b"aad", &extended_block).is_err());
+}
+
+#[test]
+fn empty_ciphertext_is_distinct_from_absent_ciphertext() {
+    let cipher = cipher();
+    let nonce = [0x99u8; 12];
+    // Sealing an empty message still produces a tag, and it must not equal the
+    // tag of a non-empty message under the same nonce and aad.
+    let empty = cipher.seal(&nonce, b"aad", b"").unwrap();
+    assert_eq!(empty.len(), AUTH_TAG_LEN);
+    let nonempty = cipher.seal(&nonce, b"aad", b"\x00").unwrap();
+    assert_ne!(empty, nonempty[..AUTH_TAG_LEN]);
+    assert_eq!(cipher.open(&nonce, b"aad", &empty).unwrap(), Vec::<u8>::new());
+}
+
+#[test]
+fn chaining_state_follows_absorbed_ciphertext_exactly() {
+    // The chaining state absorbs the ciphertext, so the keystream for block i is
+    // determined by the prefix C_0..C_(i-1) and nothing else.
+    //
+    // The two messages below deliberately share a nonce so that the first
+    // ciphertext block, and therefore the state entering block 1, are identical.
+    // Reusing a nonce is a prohibited misuse (see the dedicated test and P8), but
+    // it is the only way to isolate the chaining dependency from nonce binding.
+    let cipher = cipher();
+    let nonce = [0x5Au8; 12];
+
+    let a = vec![0x10u8; 48];
+    let mut b = a.clone();
+    // Block 0 identical, block 1 differs, block 2 identical again.
+    b[16] ^= 0x01;
+
+    let sealed_a = cipher.seal(&nonce, b"aad", &a).unwrap();
+    let sealed_b = cipher.seal(&nonce, b"aad", &b).unwrap();
+
+    // Identical plaintext block 0 under the same nonce gives identical C_0.
+    assert_eq!(&sealed_a[..16], &sealed_b[..16]);
+
+    // The keystream for block 1 is a function of the state after block 0 only.
+    // Since that state is identical, the keystream must be identical, and the
+    // ciphertext difference must equal the plaintext difference exactly.
+    let ks_a1: Vec<u8> = a[16..32].iter().zip(&sealed_a[16..32]).map(|(p, c)| p ^ c).collect();
+    let ks_b1: Vec<u8> = b[16..32].iter().zip(&sealed_b[16..32]).map(|(p, c)| p ^ c).collect();
+    assert_eq!(ks_a1, ks_b1, "block 1 keystream must depend only on the block 0 prefix");
+
+    // Block 1 ciphertext now differs, so the state entering block 2 differs and
+    // the block 2 keystream must diverge even though the block 2 plaintext is
+    // byte-for-byte identical in both messages. That makes the divergence
+    // attributable to the chaining state alone.
+    assert_ne!(&sealed_a[16..32], &sealed_b[16..32]);
+    assert_eq!(a[32..48], b[32..48], "block 2 plaintext must stay identical");
+    let ks_a2: Vec<u8> = a[32..48].iter().zip(&sealed_a[32..48]).map(|(p, c)| p ^ c).collect();
+    let ks_b2: Vec<u8> = b[32..48].iter().zip(&sealed_b[32..48]).map(|(p, c)| p ^ c).collect();
+    assert_ne!(ks_a2, ks_b2, "block 2 keystream must follow the changed chaining state");
+    assert_ne!(&sealed_a[32..48], &sealed_b[32..48]);
+
+    // Both messages are still correctly recoverable.
+    assert_eq!(cipher.open(&nonce, b"aad", &sealed_a).unwrap(), a);
+    assert_eq!(cipher.open(&nonce, b"aad", &sealed_b).unwrap(), b);
+}
+
+#[test]
+fn nonce_sequence_survives_resume_and_refuses_exhaustion() {
+    use riak::nonce::{NonceError, NonceSequence};
+
+    let cipher = cipher();
+    let prefix = [0x7Eu8; 8];
+
+    // Two separate processes resuming from a persisted counter must not collide.
+    let mut first = NonceSequence::new(prefix);
+    let (nonce_a, sealed_a) = cipher
+        .seal_with_sequence(&mut first, b"aad", b"first")
+        .unwrap();
+    let issued = first.issued();
+
+    let mut resumed = NonceSequence::resume(prefix, issued);
+    let (nonce_b, sealed_b) = cipher
+        .seal_with_sequence(&mut resumed, b"aad", b"second")
+        .unwrap();
+    assert_ne!(nonce_a, nonce_b);
+    assert_eq!(cipher.open(&nonce_a, b"aad", &sealed_a).unwrap(), b"first");
+    assert_eq!(cipher.open(&nonce_b, b"aad", &sealed_b).unwrap(), b"second");
+
+    // Resuming from zero with the same prefix would repeat a nonce, which is the
+    // misuse the API exists to make visible.
+    let mut restarted = NonceSequence::resume(prefix, 0);
+    let (nonce_c, _) = cipher
+        .seal_with_sequence(&mut restarted, b"aad", b"third")
+        .unwrap();
+    assert_eq!(nonce_c, nonce_a, "resume(0) repeated a nonce, as expected");
+
+    // Exhaustion must be an explicit error, never a wrap-around.
+    let mut almost_done = NonceSequence::resume(prefix, u32::MAX);
+    let (last, _) = cipher
+        .seal_with_sequence(&mut almost_done, b"aad", b"last")
+        .unwrap();
+    assert_eq!(last[8..], u32::MAX.to_be_bytes());
+    assert_eq!(almost_done.next(), Err(NonceError::CounterExhausted));
+    assert_eq!(
+        cipher
+            .seal_with_sequence(&mut almost_done, b"aad", b"overflow")
+            .unwrap_err(),
+        V3Error::NonceExhausted
+    );
+}
+
+#[test]
 fn deterministic_randomized_seal_open_cases() {
     let mut state = 0x0123_4567_89ab_cdefu64;
     let mut next = || {

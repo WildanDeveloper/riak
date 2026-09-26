@@ -40,15 +40,19 @@ silently overwritten.
 `riak::v3::RiakV3` replaces the sparse outer network with four sequential
 full-diffusion sub-updates per round. `riak::v3::RiakV3Cipher` and the
 `v3enc`/`v3dec` commands are isolated research interfaces. v0.3 is still
-**experimental**: it has passed implementation/vector checks and initial
-sampling screens only, not the full differential, linear-hull, related-key,
-side-channel, mode, or external-review gates.
+**experimental**: it has passed implementation/vector checks, exact
+reduced-width DDT/LAT and trail-activity screens, and an empirical mode/tag
+screen, but not the full-width differential, linear-hull, boomerang,
+related-key, side-channel, formal mode/tag, or external-review gates.
 
 There are no runtime cryptography dependencies; the cipher, mode, and tag code
 are implemented in this repository. The independent v0.3 reference is
 `simulator/riak_v3.py`, with vectors in `tests/v3_vectors.rs` and
 `tests/v3_cipher_vectors.rs`. The design and open gates are recorded in
-`docs/riak_v3.md` and `docs/riak_v3_analysis.md`. Independent reviewers
+`docs/riak_v3.md` and `docs/riak_v3_analysis.md`; the exact differential and
+linear screens are in `docs/riak_v3_ddt_lat.md` with the tool under
+`analysis/ddt-probe/`, and the wrapper screen is in
+`docs/riak_v3_mode_analysis.md`. Independent reviewers
 should start with `docs/external_review_packet.md`. Key-handling and private
 reporting guidance is in `SECURITY.md`.
 
