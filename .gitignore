@@ -7,3 +7,13 @@ __pycache__/
 *.secret
 key.hex
 keys/
+
+# Video tooling: the whole tools/ tree is downloaded artifacts (ffmpeg static
+# build, its VMAF model files, fonts). None of it belongs in a cryptography
+# repository. Only video/render_riak.py is source worth keeping.
+video/tools/
+video/venv/
+video/check/
+video/*.mp4
+video/*.tar.xz
+video/*.ttf
