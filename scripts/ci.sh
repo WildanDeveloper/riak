@@ -32,9 +32,12 @@ cargo run --release --example v3_mode_analysis
 # First-order leakage screen and its duration-matched control. These need a
 # pinned CPU and raised priority to produce meaningful numbers, so they are run
 # as a short screen here; the recorded measurements use far more samples.
+# They are launched through `cargo run` so the example is always built first.
+# An earlier version invoked the binaries directly and passed only because a
+# previous build had left them behind; after `cargo clean` it failed.
 if command -v taskset >/dev/null 2>&1; then
-  taskset -c 0 ./target/release/examples/v3_leakage 60000
-  taskset -c 0 ./target/release/examples/v3_leakage_diagnose
+  taskset -c 0 cargo run --release --example v3_leakage -- 60000
+  taskset -c 0 cargo run --release --example v3_leakage_diagnose
 else
   echo "taskset unavailable, skipping the pinned leakage screen"
 fi
