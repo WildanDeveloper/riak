@@ -61,7 +61,7 @@ are implemented in this repository. The independent v0.3 reference is
 | impossible differential and convergence | `docs/riak_v3_impossible_boomerang.md` |
 | wrapper mode and tag | `docs/riak_v3_mode_analysis.md` |
 | Rust vs Python differential fuzzing | `docs/riak_v3_fuzzing.md` |
-| side channel | `docs/v3_side_channel_audit.md` |
+| side channel | `docs/v3_side_channel_audit.md`, `docs/v3_leakage_diagnosis.md` |
 
 The exact differential and linear tool is under `analysis/ddt-probe/`.
 Independent reviewers should start with `docs/external_review_packet.md`.

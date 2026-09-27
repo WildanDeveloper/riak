@@ -94,20 +94,23 @@ Five consecutive runs, pinned and at real-time priority:
 | 4 | -4.84 | -1.02 |
 | 5 | -5.40 | -1.49 |
 
-**Finding: a small but consistent first-order timing signal.** The
-fixed-vs-random `t` is negative on every run (mean about -4.75, mean difference
-about -6 cycles or -0.3%), while the negative control stays close to zero on
-every run. The consistent sign, combined with a clean control, means this is not
-random noise and not a harness artefact.
+**Finding: a small but consistent first-order timing signal, later attributed
+to the platform rather than the cipher.** The fixed-vs-random `t` is negative on
+every run (mean about -4.75, mean difference about -6 cycles or -0.3%), while
+the negative control stays close to zero on every run.
 
-The source is not identified. `encrypt_block` and `encrypt_round` contain no
-data-dependent branch, no table lookup, and no variable-latency instruction, so
-the arithmetic is constant by inspection. The residual bias is small and its
-origin is unknown: it may be a microarchitectural data dependency (for example
-a multiplier or a shift whose latency depends on operand values), a
-measurement-environment effect that the control does not capture, or an artefact
-of the sample pairing. **This is an open item, not a cleared one.** It must be
-resolved before any constant-time claim is made about v0.3.
+This was initially recorded as an unexplained signal in the block core. It was
+then investigated with `examples/v3_leakage_diagnose.rs`, which found the
+decisive control: a chain of plain `wrapping_add` and `xor` with no cipher
+logic at all, of comparable duration, produces a **larger** bias than RIAK
+(`t` = -32.6, delta -6.8%, against RIAK's `t` = -13.0, delta -1.9%). The signal
+is therefore a platform-level data-dependent power effect, not a property of the
+RIAK design. The full reasoning, including the duration-matching mistake in the
+first diagnosis attempt, is in `docs/v3_leakage_diagnosis.md`.
+
+**v0.3 is still not certified constant-time.** Attributing the signal to the
+platform is not the same as proving the cipher leaks nothing, and nothing here
+establishes constant-time behaviour.
 
 This screen still does not cover second-order leakage, the cache, port
 contention, speculative execution, power analysis, other hardware, other
@@ -158,16 +161,17 @@ leakage or of constant-time behavior.
 
 ## Open work
 
-1. **Resolve the first-order timing signal** measured above. The negative
-   control is clean while the fixed-vs-random difference is consistent at about
-   -0.3%, so the setup is sound and the source is unexplained. Determine whether
-   it is a real data dependency in the core or a measurement artefact before
-   making any constant-time claim.
-2. Extend the statistical screen to the wrapper mode and tag paths, which are
+1. Extend the statistical screen to the wrapper mode and tag paths, which are
    not covered, and to second-order leakage.
-3. Run the screen on multiple compiler versions, optimization levels, and
+2. Run the screen on multiple compiler versions, optimization levels, and
    targets. `dudect` and `ctgrind` are still unavailable here, so the current
    test is a hand-written first-order substitute.
+3. Re-measure on hardware without aggressive power management. The first-order
+   effect found here is a platform property, so a machine that does not exhibit
+   it would give a much cleaner result, and that result should be recorded.
+4. Any future leakage test must use a **duration-matched** control. The first
+   diagnosis attempt in this project compared a 2000-cycle measurement against a
+   28-cycle one and drew a wrong conclusion from it.
 2. Inspect generated assembly for every supported target, including ARM and
    wasm if claimed. `scripts/asm_audit.sh` currently covers the `x86_64` host
    build only.

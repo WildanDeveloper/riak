@@ -28,6 +28,16 @@ cargo run --release --example v3_related_multibit 256
 cargo run --release --example v3_timing
 cargo run --release --example v3_bench
 cargo run --release --example v3_mode_analysis
+
+# First-order leakage screen and its duration-matched control. These need a
+# pinned CPU and raised priority to produce meaningful numbers, so they are run
+# as a short screen here; the recorded measurements use far more samples.
+if command -v taskset >/dev/null 2>&1; then
+  taskset -c 0 ./target/release/examples/v3_leakage 60000
+  taskset -c 0 ./target/release/examples/v3_leakage_diagnose
+else
+  echo "taskset unavailable, skipping the pinned leakage screen"
+fi
 cargo run --release --example v3_related_key_schedule
 cargo run --release --example v3_impossible_boomerang
 

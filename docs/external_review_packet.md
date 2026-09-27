@@ -34,6 +34,7 @@ Relevant source:
 - `docs/riak_v3_mode_analysis.md` (wrapper mode/tag empirical screen)
 - `docs/riak_v3_fuzzing.md` (Rust vs Python differential fuzzing)
 - `docs/v3_side_channel_audit.md`
+- `docs/v3_leakage_diagnosis.md` (first-order timing signal, attributed)
 - `analysis/ddt-probe/` (exact DDT/LAT and trail-activity tool)
 - `examples/v3_mode_analysis.rs`
 - `examples/v3_related_key_schedule.rs`
@@ -134,9 +135,16 @@ generated cases, including partial-block, empty and repeated-key shapes.
 
 **Assembly side channel** (`scripts/asm_audit.sh`). A repeatable static screen
 now runs in CI: no integer division in the core, and conditional branches are
-listed for review. It is a static screen on one toolchain, not a constant-time
-guarantee, and statistical leakage testing with `dudect` or `ctgrind` is still
-outstanding.
+listed for review.
+
+**First-order timing** (`docs/v3_leakage_diagnosis.md`). A hand-written
+dudect-style test found a consistent fixed-vs-random bias of about -0.3%. A
+duration-matched control resolved its source: a chain of plain wrapping
+additions with no cipher logic shows a **larger** bias than RIAK, so the effect
+is a platform-level data-dependent power effect and not a property of the
+cipher. v0.3 is still not certified constant-time, `dudect` and `ctgrind` are
+unavailable here, and second-order, cache, port-contention, and speculative
+channels are uncovered.
 
 ## 4. Key schedule to review
 
